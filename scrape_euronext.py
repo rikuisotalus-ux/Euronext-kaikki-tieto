@@ -25,6 +25,9 @@ def clean_html(text):
 
 def scrape_api():
     all_rows = []
+    header_written = False
+    headers = []
+
     today = datetime.utcnow().strftime("%Y-%m-%d")
 
     for product in PRODUCTS:
@@ -35,26 +38,29 @@ def scrape_api():
 
         response = requests.get(url, headers=HEADERS)
 
-        if response.status_code != 200:
-            print(f"❌ HTTP {response.status_code}")
-            continue
-
         html = response.text
 
-        # ✅ etsitään kaikki <tr> rivit
+        # ✅ HEADERIT
+        if not header_written:
+            header_match = re.findall(r"<th.*?>(.*?)</th>", html)
+            headers = [clean_html(h) for h in header_match]
+
+            headers.extend(["Product", "Date"])
+            header_written = True
+
+        # ✅ RIVIT
         rows = re.findall(r"<tr.*?>(.*?)</tr>", html, re.DOTALL)
 
-        print(f"✅ HTML rivejä: {len(rows)}")
+        print(f"✅ Rivejä: {len(rows)}")
 
         for row in rows:
             cols = re.findall(r"<td.*?>(.*?)</td>", row, re.DOTALL)
             cols = [clean_html(c) for c in cols]
 
-            if len(cols) < 6:
+            if len(cols) < 5:
                 continue
 
             delivery = cols[0]
-            settlement = cols[5]
 
             if (
                 delivery == ""
@@ -63,20 +69,17 @@ def scrape_api():
             ):
                 continue
 
-            all_rows.append([
-                delivery,
-                settlement,
-                name,
-                today
-            ])
+            # ✅ LISÄÄ kaikki sarakkeet
+            full_row = cols + [name, today]
+            all_rows.append(full_row)
 
-    # ✅ kirjoita CSV
+    # ✅ CSV
     with open("combined_settlement.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["Delivery", "Settlement", "Product", "Date"])
+        writer.writerow(headers)
         writer.writerows(all_rows)
 
-    print("\n✅ CSV valmis!")
+    print("\n✅ CSV valmis täydellisillä sarakkeilla!")
 
 
 if __name__ == "__main__":
