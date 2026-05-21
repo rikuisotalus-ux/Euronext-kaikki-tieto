@@ -13,6 +13,11 @@ PRODUCTS = [
 
 BASE_URL = "https://live.euronext.com/en/ajax/getPricesFutures/commodities-futures/{code}/DAMS"
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Accept": "application/json, text/javascript, */*; q=0.01"
+}
+
 
 def strip_html(text):
     import re
@@ -27,12 +32,27 @@ def scrape_api():
         url = BASE_URL.format(code=product["code"])
         name = product["name"]
 
-        print(f"🔎 Hakee: {url}")
+        print(f"\n🔎 Hakee: {url}")
 
-        response = requests.get(url)
+        response = requests.get(url, headers=HEADERS)
+
+        # ✅ DEBUG jos menee pieleen
+        if response.status_code != 200:
+            print(f"❌ HTTP error: {response.status_code}")
+            continue
+
+        text = response.text.strip()
+
+        # ✅ jos ei ole JSON → skip
+        if not text.startswith("{"):
+            print("⚠️ Ei JSON vastaus, ohitetaan")
+            continue
+
         data = response.json()
 
         rows = data.get("aaData", [])
+
+        print(f"✅ Rivejä: {len(rows)}")
 
         for row in rows:
             clean = [strip_html(cell) for cell in row]
@@ -43,7 +63,11 @@ def scrape_api():
             delivery = clean[0]
             settlement = clean[5]
 
-            if delivery.lower() == "total":
+            if (
+                delivery == ""
+                or delivery.lower() == "total"
+                or "/" in delivery
+            ):
                 continue
 
             all_rows.append([
@@ -58,7 +82,7 @@ def scrape_api():
         writer.writerow(["Delivery", "Settlement", "Product", "Date"])
         writer.writerows(all_rows)
 
-    print("✅ CSV valmis!")
+    print("\n✅ CSV valmis!")
 
 
 if __name__ == "__main__":
