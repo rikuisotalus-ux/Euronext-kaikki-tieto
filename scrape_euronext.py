@@ -3,6 +3,9 @@ import csv
 from datetime import datetime
 import re
 
+# =============================
+# TUOTTEET
+# =============================
 PRODUCTS = [
     {"code": "HLBY", "name": "HLBY"},
     {"code": "HLBQ", "name": "HLBQ"},
@@ -12,6 +15,9 @@ PRODUCTS = [
     {"code": "NSBM", "name": "NSBM"},
 ]
 
+# =============================
+# URL + HEADERS
+# =============================
 BASE_URL = "https://live.euronext.com/en/ajax/getPricesFutures/commodities-futures/{code}/DAMS"
 
 HEADERS = {
@@ -19,14 +25,62 @@ HEADERS = {
 }
 
 
+# =============================
+# CLEAN HTML
+# =============================
 def clean_html(text):
     return re.sub("<.*?>", "", text).strip()
 
 
+# =============================
+# PRODUCT CODE BUILDER
+# =============================
+def build_product_code(product, delivery):
+    if not delivery:
+        return None
+
+    d = delivery.strip()
+
+    if d.lower() == "total":
+        return None
+
+    parts = d.split()
+
+    # YYYY (vuosituote)
+    if len(parts) == 1:
+        return f"{product}-{d[-2:]}"
+
+    year = parts[-1]
+    yy = year[-2:]
+    first = parts[0].upper()
+
+    # Quarter (Q1, Q2...)
+    if first.startswith("Q"):
+        return f"{product}{first[1]}-{yy}"
+
+    # Month mapping
+    month_map = {
+        "JAN": "JAN", "FEB": "FEB", "MAR": "MAR",
+        "APR": "APR", "MAY": "MAY", "JUN": "JUN",
+        "JUL": "JUL", "AUG": "AUG", "SEP": "SEP",
+        "OCT": "OCT", "NOV": "NOV", "DEC": "DEC",
+    }
+
+    month = first[:3]
+
+    if month in month_map:
+        return f"{product}{month_map[month]}-{yy}"
+
+    return None
+
+
+# =============================
+# SCRAPER
+# =============================
 def scrape_api():
     all_rows = []
-    header_written = False
     headers = []
+    header_written = False
 
     today = datetime.utcnow().strftime("%Y-%m-%d")
 
@@ -38,14 +92,18 @@ def scrape_api():
 
         response = requests.get(url, headers=HEADERS)
 
+        if response.status_code != 200:
+            print(f"❌ HTTP virhe: {response.status_code}")
+            continue
+
         html = response.text
 
-        # ✅ HEADERIT
+        # ✅ HEADERIT (vain kerran)
         if not header_written:
             header_match = re.findall(r"<th.*?>(.*?)</th>", html)
             headers = [clean_html(h) for h in header_match]
 
-            headers.extend(["Product", "Date"])
+            headers.extend(["Product", "ProductCode", "Date"])
             header_written = True
 
         # ✅ RIVIT
@@ -69,8 +127,10 @@ def scrape_api():
             ):
                 continue
 
-            # ✅ LISÄÄ kaikki sarakkeet
-            full_row = cols + [name, today]
+            # ✅ ProductCode
+            product_code = build_product_code(name, delivery)
+
+            full_row = cols + [name, product_code, today]
             all_rows.append(full_row)
 
     # ✅ CSV
@@ -79,8 +139,11 @@ def scrape_api():
         writer.writerow(headers)
         writer.writerows(all_rows)
 
-    print("\n✅ CSV valmis täydellisillä sarakkeilla!")
+    print("\n✅ CSV valmis täydellisillä sarakkeilla + ProductCode!")
 
 
+# =============================
+# RUN
+# =============================
 if __name__ == "__main__":
     scrape_api()
