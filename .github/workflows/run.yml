@@ -2,7 +2,7 @@ name: Euronext API Scraper
 
 on:
   schedule:
-    - cron: "0 17 * * *"   # klo 17 Suomessa (kesäaika)
+    - cron: "0 16 * * *"   # klo 17 Suomessa (kesäaika)
   workflow_dispatch:
 
 permissions:
